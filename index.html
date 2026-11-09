@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Fiş Tarayıcı">
+<title>Fiş Tarayıcı</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+:root{
+  --bg:#E9ECF1; --surface:#FFFFFF; --text:#18202E; --muted:#5B6576;
+  --ink:#2643A8; --ink-text:#FFFFFF; --line:#CDD3DD; --danger:#B42318; --ok:#1F7A4D;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0F1522; --surface:#1A2233; --text:#E8ECF3; --muted:#9AA4B5;
+    --ink:#7E9BFF; --ink-text:#0F1522; --line:#2C3649; --danger:#FF8A80; --ok:#6FD3A0;
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;
+  -webkit-user-select:none;user-select:none;overscroll-behavior:none}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+.app{height:100dvh;display:flex;flex-direction:column;
+  padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+
+.top{display:flex;align-items:center;gap:12px;padding:10px 16px}
+.top h1{font-size:17px;font-weight:650;margin:0;flex:1;letter-spacing:-.01em}
+.count{font-variant-numeric:tabular-nums;font-size:15px;color:var(--muted)}
+.count b{color:var(--text);font-weight:650}
+.icon{width:40px;height:40px;border-radius:50%;border:1px solid var(--line);
+  background:var(--surface);font-size:18px;line-height:1}
+
+.finder{position:relative;flex:1;min-height:0;margin:0 12px;border-radius:18px;
+  overflow:hidden;background:#000}
+.finder video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.guide{position:absolute;inset:6% 16%;pointer-events:none;transition:opacity .2s}
+.guide i{position:absolute;width:28px;height:28px;border:3px solid #fff;opacity:.9;transition:border-color .2s}
+.guide i:nth-child(1){top:0;left:0;border-right:0;border-bottom:0;border-top-left-radius:8px}
+.guide i:nth-child(2){top:0;right:0;border-left:0;border-bottom:0;border-top-right-radius:8px}
+.guide i:nth-child(3){bottom:0;left:0;border-right:0;border-top:0;border-bottom-left-radius:8px}
+.guide i:nth-child(4){bottom:0;right:0;border-left:0;border-top:0;border-bottom-right-radius:8px}
+.guide.hold i{border-color:#FFD34D}
+.guide.ok i{border-color:#5BE39A}
+.guide.off{opacity:0}
+.status{position:absolute;top:12px;left:50%;transform:translateX(-50%);
+  background:rgba(0,0,0,.66);color:#fff;font-size:14px;font-weight:550;padding:7px 14px;
+  border-radius:999px;white-space:nowrap;pointer-events:none}
+.status:empty{display:none}
+.flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .25s}
+.flash.on{opacity:.75;transition:none}
+.toast{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);
+  background:rgba(0,0,0,.72);color:#fff;font-size:14px;padding:8px 14px;border-radius:999px;
+  opacity:0;transition:opacity .2s;white-space:nowrap;pointer-events:none}
+.toast.on{opacity:1}
+.intro{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:18px;padding:28px;text-align:center;color:#fff;background:#121826}
+.intro p{margin:0;max-width:32ch;line-height:1.5;color:#C9D0DC;font-size:15px}
+.intro .err{color:#FFB4AB;min-height:1em}
+
+.strip{display:flex;gap:8px;overflow-x:auto;padding:10px 16px 4px;min-height:74px;scrollbar-width:none}
+.strip::-webkit-scrollbar{display:none}
+.strip:empty::before{content:"Taranan fişler burada sıralanır";color:var(--muted);font-size:13px;align-self:center}
+.slipwrap{position:relative;flex:0 0 auto}
+.slip{width:42px;height:60px;border:0;padding:0;background:#fff;display:block;
+  clip-path:polygon(0 0,100% 0,100% 92%,87.5% 100%,75% 92%,62.5% 100%,50% 92%,37.5% 100%,25% 92%,12.5% 100%,0 92%)}
+.slip img{width:100%;height:100%;object-fit:cover;display:block}
+.slipwrap.new{animation:drop .35s ease-out}
+.slipwrap.warn::after{content:"!";position:absolute;top:-4px;right:-4px;width:18px;height:18px;
+  border-radius:50%;background:var(--danger);color:#fff;font-size:12px;font-weight:700;
+  display:grid;place-items:center;pointer-events:none}
+@keyframes drop{from{transform:translateY(-14px);opacity:0}}
+
+.modes{display:flex;margin:6px 16px 0;background:var(--surface);border:1px solid var(--line);
+  border-radius:12px;padding:3px}
+.modes button{flex:1;border:0;background:none;padding:8px 0;border-radius:9px;font-size:14px;color:var(--muted)}
+.modes button[aria-checked="true"]{background:var(--ink);color:var(--ink-text);font-weight:600}
+
+.controls{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;padding:14px 16px 10px}
+.side{justify-self:center;min-width:92px;height:44px;border-radius:22px;border:1px solid var(--line);
+  background:var(--surface);font-size:15px;padding:0 14px}
+.side.strong{background:var(--ink);color:var(--ink-text);border-color:var(--ink);font-weight:650}
+.side:disabled,.shutter:disabled{opacity:.4;cursor:default}
+.shutter{position:relative;width:84px;height:84px;border-radius:50%;border:0;padding:0;
+  background:var(--surface);display:grid;place-items:center}
+.shutter svg{position:absolute;inset:0;transform:rotate(-90deg)}
+.shutter circle{fill:none;stroke-width:6}
+.shutter .track{stroke:var(--line)}
+.shutter .prog{stroke:var(--ink);stroke-linecap:round;stroke-dasharray:282.74;stroke-dashoffset:282.74}
+.shutter span{position:relative;font-size:15px;font-weight:650;font-variant-numeric:tabular-nums}
+.shutter.run span{font-size:24px}
+
+.primary{background:var(--ink);color:var(--ink-text);border:0;border-radius:14px;
+  padding:14px 26px;font-size:16px;font-weight:650;text-decoration:none;display:inline-block;text-align:center}
+.ghost{background:none;border:1px solid var(--line);border-radius:14px;padding:13px 20px;font-size:15px;
+  color:inherit;text-decoration:none;text-align:center}
+.danger{color:var(--danger)}
+
+dialog{border:0;border-radius:20px;background:var(--surface);color:var(--text);
+  width:min(92vw,420px);max-height:90dvh;overflow:auto;padding:22px}
+dialog::backdrop{background:rgba(8,12,20,.55)}
+dialog h2{margin:0 0 16px;font-size:19px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:12px 0;border-bottom:1px solid var(--line);font-size:15px}
+.row small{display:block;color:var(--muted);font-size:13px;margin-top:2px}
+.row select{font:inherit;padding:6px 8px;border-radius:8px;border:1px solid var(--line);
+  background:var(--bg);color:var(--text)}
+.row input[type=checkbox]{width:22px;height:22px;accent-color:var(--ink);flex:0 0 auto}
+.row.hidden{display:none}
+.actions{display:flex;flex-direction:column;gap:10px;margin-top:18px}
+.meta{color:var(--muted);margin:0 0 6px;font-size:15px}
+.meta.warn{color:var(--danger)}
+#previewImg{width:100%;max-height:60vh;object-fit:contain;background:#fff;border-radius:8px;display:block}
+@media (prefers-reduced-motion: reduce){.slipwrap.new{animation:none}.flash{transition:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <h1>Fiş Tarayıcı</h1>
+    <span class="count"><b id="count">0</b> sayfa</span>
+    <button class="icon" id="settingsBtn" aria-label="Ayarlar">⚙︎</button>
+  </header>
+
+  <main class="finder">
+    <video id="video" playsinline muted autoplay></video>
+    <div class="guide" id="guide"><i></i><i></i><i></i><i></i></div>
+    <div class="status" id="status" aria-live="polite"></div>
+    <div class="flash" id="flash"></div>
+    <div class="toast" id="toast"></div>
+    <div class="intro" id="intro">
+      <p>Fişi çerçeveye koy ve elini çek. Görüntü sabitlenince kendisi çeker. Sonra sıradaki fişi koy, hepsi bitince tek PDF yap.</p>
+      <button class="primary" id="openCam">Kamerayı aç</button>
+      <p class="err" id="err"></p>
+    </div>
+  </main>
+
+  <div class="strip" id="strip" aria-label="Taranan fişler"></div>
+
+  <div class="modes" role="radiogroup" aria-label="Tarama modu">
+    <button role="radio" data-mode="orig" aria-checked="false">Orijinal</button>
+    <button role="radio" data-mode="color" aria-checked="false">Renkli</button>
+    <button role="radio" data-mode="gray" aria-checked="true">Gri</button>
+    <button role="radio" data-mode="bw" aria-checked="false">Siyah-beyaz</button>
+  </div>
+
+  <footer class="controls">
+    <button class="side" id="snap" disabled>Şimdi çek</button>
+    <button class="shutter" id="shutter" disabled aria-label="Otomatik çekimi başlat">
+      <svg viewBox="0 0 100 100" aria-hidden="true"><circle class="track" cx="50" cy="50" r="45"/><circle class="prog" id="prog" cx="50" cy="50" r="45"/></svg>
+      <span id="shutterLabel">Başlat</span>
+    </button>
+    <button class="side strong" id="pdfBtn" disabled>PDF yap</button>
+  </footer>
+</div>
+
+<dialog id="settings">
+  <h2>Ayarlar</h2>
+  <div class="row"><label for="trigger">Çekim zamanı<small>Akıllı: fiş sabitlenince çeker</small></label>
+    <select id="trigger"><option value="smart" selected>Akıllı</option><option value="timer">Zamanlayıcı</option></select></div>
+  <div class="row" id="rowHold"><span>Sabit bekleme</span>
+    <select id="hold"><option value="500">0,5 sn</option><option value="800" selected>0,8 sn</option><option value="1200">1,2 sn</option></select></div>
+  <div class="row hidden" id="rowInterval"><span>Çekim aralığı</span>
+    <select id="interval">
+      <option value="3">3 sn</option><option value="4">4 sn</option><option value="5" selected>5 sn</option>
+      <option value="7">7 sn</option><option value="10">10 sn</option>
+    </select></div>
+  <div class="row"><label for="detect">Fişi otomatik bul<small>Masayı keser, eğik fişi düzeltir</small></label>
+    <input type="checkbox" id="detect" checked></div>
+  <div class="row"><label for="crop">Çerçeveye kırp<small>Kapalıysa kameranın tüm görüntüsü kullanılır</small></label>
+    <input type="checkbox" id="crop" checked></div>
+  <div class="row"><span>PDF düzeni</span>
+    <select id="pageSize">
+      <option value="fit" selected>Fişe göre</option>
+      <option value="a4">A4, sayfa başı 1 fiş</option>
+      <option value="a4x3">A4, sayfa başı 3 fiş</option>
+    </select></div>
+  <div class="row"><label for="sound">Çekim sesi<small>iPhone sessizdeyse duyulmaz</small></label>
+    <input type="checkbox" id="sound" checked></div>
+  <div class="actions">
+    <button class="ghost danger" id="clearAll">Tüm sayfaları sil</button>
+    <button class="primary" id="closeSettings">Tamam</button>
+  </div>
+</dialog>
+
+<dialog id="preview">
+  <img id="previewImg" alt="Taranan fiş">
+  <p class="meta" id="previewMeta" style="margin-top:12px"></p>
+  <div class="actions">
+    <button class="ghost danger" id="deletePage">Bu sayfayı sil</button>
+    <button class="primary" id="closePreview">Kapat</button>
+  </div>
+</dialog>
+
+<dialog id="done">
+  <h2>PDF hazır</h2>
+  <p class="meta" id="doneMeta"></p>
+  <div class="actions">
+    <button class="primary" id="shareBtn">Paylaş / Dosyalara kaydet</button>
+    <a class="ghost" id="dlLink">İndir</a>
+    <button class="ghost danger" id="newSession">Yeni oturum başlat</button>
+    <button class="ghost" id="closeDone">Kapat</button>
+  </div>
+</dialog>
+
+<script>
+const $ = id => document.getElementById(id);
+const video=$('video'), guide=$('guide'), strip=$('strip'), prog=$('prog');
+const C = 282.74;
+const AW = 48, AH = 64;               // hareket analizi çözünürlüğü
+const M_HI = 10, M_LO = 5, NOVELTY = 9; // hareket / sabitlik / yeni fiş eşikleri
+const S = {
+  stream:null, running:false, busy:false, trigger:'smart', hold:800, interval:5,
+  mode:'gray', crop:true, detect:true, sound:true, pageSize:'fit',
+  pages:[], prevSig:null, lastSig:null, stillSince:0, armed:true, nextAt:0,
+  ac:null, wake:null, pdf:null, pdfUrl:null, previewIdx:-1, curSig:null
+};
+const ac = document.createElement('canvas'); ac.width = AW; ac.height = AH;
+const actx = ac.getContext('2d', {willReadFrequently:true});
+
+/* ---------- Kalıcı kayıt (sayfa yenilense de taramalar kaybolmaz) ---------- */
+const DB = {
+  db:null,
+  open(){ return new Promise(res => {
+    try {
+      const r = indexedDB.open('fis-tarayici', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('pages', {keyPath:'id'});
+      r.onsuccess = () => { DB.db = r.result; res(true); };
+      r.onerror = () => res(false);
+    } catch(e){ res(false); }
+  });},
+  store(mode){ return DB.db.transaction('pages', mode).objectStore('pages'); },
+  async put(p){ if (!DB.db) return; try {
+    const buf = await p.blob.arrayBuffer();
+    DB.store('readwrite').put({id:p.id, buf, w:p.w, h:p.h, sharp:p.sharp});
+  } catch(e){} },
+  del(id){ if (DB.db) try { DB.store('readwrite').delete(id); } catch(e){} },
+  clear(){ if (DB.db) try { DB.store('readwrite').clear(); } catch(e){} },
+  all(){ return new Promise(res => {
+    if (!DB.db) return res([]);
+    try { const r = DB.store('readonly').getAll(); r.onsuccess = () => res(r.result || []); r.onerror = () => res([]); }
+    catch(e){ res([]); }
+  });}
+};
+(async () => {
+  if (await DB.open()) {
+    const rows = await DB.all();
+    rows.forEach(r => {
+      const blob = new Blob([r.buf], {type:'image/jpeg'});
+      addPage({id:r.id, blob, w:r.w, h:r.h, sharp:r.sharp, url:URL.createObjectURL(blob)}, false);
+    });
+    if (rows.length) toast(`Önceki oturumdan ${rows.length} sayfa geri yüklendi`, 2500);
+  }
+})();
+
+/* ---------- Kamera ---------- */
+$('openCam').onclick = async () => {
+  $('err').textContent = '';
+  if (!window.isSecureContext || !navigator.mediaDevices) {
+    $('err').textContent = 'Kamera için sayfa https:// adresinden Safari ile açılmalı.'; return;
+  }
+  try {
+    S.stream = await navigator.mediaDevices.getUserMedia({
+      audio:false, video:{ facingMode:{ideal:'environment'}, width:{ideal:3840}, height:{ideal:2160} }
+    });
+    video.srcObject = S.stream;
+    await video.play();
+    try { S.ac = new (window.AudioContext||window.webkitAudioContext)(); } catch(e){}
+    $('intro').remove();
+    $('snap').disabled = false; $('shutter').disabled = false;
+    setInterval(analyze, 110);
+  } catch (e) {
+    $('err').textContent = e.name === 'NotAllowedError'
+      ? 'Kamera izni verilmedi. Ayarlar › Safari › Kamera bölümünden izin ver.'
+      : 'Kamera açılamadı: ' + e.message;
+  }
+};
+
+function srcRect(){
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (!S.crop) return {sx:0, sy:0, sw:vw, sh:vh};
+  const v = video.getBoundingClientRect(), r = guide.getBoundingClientRect();
+  const k = Math.max(v.width/vw, v.height/vh);
+  const ox = (vw*k - v.width)/2, oy = (vh*k - v.height)/2;
+  const sx = Math.max(0, (r.left - v.left + ox)/k), sy = Math.max(0, (r.top - v.top + oy)/k);
+  return {sx, sy, sw:Math.min(vw-sx, r.width/k), sh:Math.min(vh-sy, r.height/k)};
+}
+
+/* ---------- Otomatik çekim ---------- */
+$('shutter').onclick = () => S.running ? stopAuto() : startAuto();
+function startAuto(){
+  S.running = true; S.armed = true;
+  S.nextAt = performance.now() + S.interval*1000;
+  $('shutter').classList.add('run');
+  $('shutter').setAttribute('aria-label', 'Otomatik çekimi duraklat');
+  if (S.ac && S.ac.state === 'suspended') S.ac.resume();
+  keepAwake();
+}
+function stopAuto(){
+  S.running = false;
+  prog.style.strokeDashoffset = C;
+  $('shutter').classList.remove('run');
+  $('shutterLabel').textContent = 'Devam';
+  $('shutter').setAttribute('aria-label', 'Otomatik çekime devam et');
+  setStatus('', '');
+}
+$('snap').onclick = () => { capture(); S.nextAt = performance.now() + S.interval*1000; };
+
+/* Her ~0,1 sn: hareket var mı, fiş var mı, sabit mi? */
+function analyze(){
+  if (!video.videoWidth || document.hidden) return;
+  const r = srcRect();
+  actx.drawImage(video, r.sx, r.sy, r.sw, r.sh, 0, 0, AW, AH);
+  const d = actx.getImageData(0, 0, AW, AH).data, n = AW*AH, g = new Float32Array(n);
+  let sum = 0;
+  for (let i=0, j=0; i<n; i++, j+=4) { g[i] = d[j]*.3 + d[j+1]*.59 + d[j+2]*.11; sum += g[i]; }
+  const paper = paperPresent(g);
+  const m = sum/n || 1;
+  for (let i=0; i<n; i++) g[i] = g[i]/m*128;
+  const motion = S.prevSig ? sigDiff(g, S.prevSig) : 99;
+  S.prevSig = g; S.curSig = g;
+  const now = performance.now();
+  if (motion > M_HI) { S.stillSince = 0; S.armed = true; }
+  else if (motion < M_LO) { if (!S.stillSince) S.stillSince = now; }
+  else S.stillSince = 0;
+
+  if (!S.running) return;
+  const still = S.stillSince ? now - S.stillSince : 0;
+
+  if (S.trigger === 'timer') {
+    const left = Math.max(0, S.nextAt - now);
+    prog.style.strokeDashoffset = C * (left/(S.interval*1000));
+    $('shutterLabel').textContent = Math.ceil(left/1000) || '•';
+    if (left <= 0) {
+      if (still >= 300) { capture(); S.nextAt = now + S.interval*1000; setStatus('Çekildi', 'ok'); }
+      else setStatus('Sabit tut', 'hold');   // titrerken çekmez, bekler
+    } else setStatus(paper ? `${Math.ceil(left/1000)} sn` : 'Fiş bekleniyor', '');
+    return;
+  }
+
+  // Akıllı mod
+  if (!paper) { setStatus('Fiş bekleniyor', ''); ring(0, '•'); return; }
+  if (!S.armed) { setStatus('Çekildi, sıradaki fişi koy', 'ok'); ring(0, '✓'); return; }
+  if (!still) { setStatus('Sabit tut', 'hold'); ring(0, '•'); return; }
+  ring(Math.min(1, still/S.hold), '•');
+  setStatus('Sabit tut', 'hold');
+  if (still >= S.hold) {
+    if (!S.lastSig || sigDiff(g, S.lastSig) > NOVELTY) capture();
+    else { S.armed = false; toast('Aynı fiş, atlandı'); }
+  }
+}
+function ring(f, label){ prog.style.strokeDashoffset = C*(1-f); $('shutterLabel').textContent = label; }
+function setStatus(text, cls){
+  $('status').textContent = text;
+  guide.classList.toggle('hold', cls === 'hold');
+  guide.classList.toggle('ok', cls === 'ok');
+}
+function paperPresent(g){
+  const t = otsu(g); let nb=0, sb=0, sd=0;
+  for (let i=0; i<g.length; i++) { if (g[i] > t) { nb++; sb += g[i]; } else sd += g[i]; }
+  const frac = nb/g.length;
+  if (frac < .08 || frac > .97) return false;
+  return (sb/nb) - (sd/(g.length-nb)) > 28;
+}
+function otsu(g){
+  const h = new Float64Array(256);
+  for (let i=0; i<g.length; i++) h[Math.min(255, g[i]|0)]++;
+  let total=g.length, sum=0; for (let i=0; i<256; i++) sum += i*h[i];
+  let sB=0, wB=0, best=0, t=128;
+  for (let i=0; i<256; i++) {
+    wB += h[i]; if (!wB) continue; const wF = total-wB; if (!wF) break;
+    sB += i*h[i]; const mB = sB/wB, mF = (sum-sB)/wF, v = wB*wF*(mB-mF)*(mB-mF);
+    if (v > best) { best = v; t = i; }
+  }
+  return t;
+}
+function sigDiff(a, b){ let s=0; for (let i=0; i<a.length; i++) s += Math.abs(a[i]-b[i]); return s/a.length; }
+
+async function keepAwake(){
+  try { if ('wakeLock' in navigator && !S.wake) {
+    S.wake = await navigator.wakeLock.request('screen');
+    S.wake.addEventListener('release', () => S.wake = null);
+  }} catch(e){}
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && S.running) keepAwake();
+});
+
+/* ---------- Çekim + tarama ---------- */
+function capture(){
+  if (S.busy || !video.videoWidth) return;
+  S.busy = true;
+  S.armed = false;
+  S.lastSig = S.curSig;
+  const r = srcRect();
+  const sc = Math.min(1, 2600/Math.max(r.sw, r.sh));
+  let cv = document.createElement('canvas');
+  cv.width = Math.round(r.sw*sc); cv.height = Math.round(r.sh*sc);
+  cv.getContext('2d').drawImage(video, r.sx, r.sy, r.sw, r.sh, 0, 0, cv.width, cv.height);
+  flash(); beep();
+
+  setTimeout(() => {   // flaş ekranda görünsün diye işlemi bir sonraki kareye bırak
+    if (S.detect) { const f = findPaper(cv); if (f) cv = straighten(cv, f); }
+    const sharp = sharpness(cv);
+    const ctx = cv.getContext('2d', {willReadFrequently:true});
+    enhance(ctx, cv.width, cv.height, S.mode);
+    cv.toBlob(blob => {
+      S.busy = false;
+      if (!blob) { toast('Çekim kaydedilemedi'); return; }
+      const p = {id:Date.now()*100 + Math.floor(Math.random()*100), blob, w:cv.width, h:cv.height, sharp, url:URL.createObjectURL(blob)};
+      addPage(p, true);
+      DB.put(p);
+      if (isBlurry(p)) toast('Bu fiş bulanık olabilir, kontrol et', 2200);
+    }, 'image/jpeg', 0.82);
+  }, 30);
+}
+
+/* Fişi masadan ayırır: en büyük parlak bölge, eğimi ve sınırları */
+function findPaper(cv){
+  const w = 360, h = Math.round(cv.height*w/cv.width);
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const x = c.getContext('2d', {willReadFrequently:true}); x.drawImage(cv, 0, 0, w, h);
+  const d = x.getImageData(0, 0, w, h).data, n = w*h, g = new Float32Array(n);
+  for (let i=0, j=0; i<n; i++, j+=4) g[i] = d[j]*.3 + d[j+1]*.59 + d[j+2]*.11;
+  const t = otsu(g);
+  const mask = new Uint8Array(n); for (let i=0; i<n; i++) mask[i] = g[i] > t ? 1 : 0;
+  // en büyük bağlı bölge
+  const lab = new Int32Array(n), stack = new Int32Array(n);
+  let best = 0, bestSize = 0, cur = 0;
+  for (let s=0; s<n; s++) {
+    if (!mask[s] || lab[s]) continue;
+    cur++; let sp = 0, size = 0; stack[sp++] = s; lab[s] = cur;
+    while (sp) {
+      const i = stack[--sp]; size++;
+      const px = i % w;
+      if (px > 0 && mask[i-1] && !lab[i-1]) { lab[i-1] = cur; stack[sp++] = i-1; }
+      if (px < w-1 && mask[i+1] && !lab[i+1]) { lab[i+1] = cur; stack[sp++] = i+1; }
+      if (i >= w && mask[i-w] && !lab[i-w]) { lab[i-w] = cur; stack[sp++] = i-w; }
+      if (i < n-w && mask[i+w] && !lab[i+w]) { lab[i+w] = cur; stack[sp++] = i+w; }
+    }
+    if (size > bestSize) { bestSize = size; best = cur; }
+  }
+  const area = bestSize/n;
+  if (area < .06 || area > .97) return null;
+  // her satırda fişin sol/sağ kenarı
+  const L = new Int32Array(h).fill(-1), R = new Int32Array(h).fill(-1);
+  for (let i=0; i<n; i++) if (lab[i] === best) {
+    const y = (i/w)|0, px = i % w;
+    if (L[y] < 0 || px < L[y]) L[y] = px;
+    if (px > R[y]) R[y] = px;
+  }
+  const widths = []; for (let y=0; y<h; y++) if (L[y] >= 0) widths.push(R[y]-L[y]);
+  widths.sort((a, b) => a-b);
+  const med = widths[widths.length >> 1] || 0;
+  // fiş ekseninin eğimi (satır merkezlerine doğru uydurma)
+  let sy=0, sx=0, syy=0, sxy=0, k=0;
+  for (let y=0; y<h; y++) {
+    if (L[y] < 0 || R[y]-L[y] < med*.7 || R[y]-L[y] > med*1.3) continue;
+    const cx = (L[y]+R[y])/2; sy += y; sx += cx; syy += y*y; sxy += y*cx; k++;
+  }
+  let theta = 0;
+  if (k > h*.2) {
+    const a = (k*sxy - sy*sx) / (k*syy - sy*sy || 1);
+    theta = Math.atan(a);
+    if (Math.abs(theta) > .26) theta = 0;
+  }
+  // düzeltilmiş koordinatlarda kenar kutusu
+  const cos = Math.cos(theta), sin = Math.sin(theta), cx0 = w/2, cy0 = h/2;
+  const xs = [], ys = [];
+  for (let y=0; y<h; y++) {
+    if (L[y] < 0) continue;
+    for (const px of [L[y], R[y]]) {
+      const dx = px-cx0, dy = y-cy0;
+      xs.push(dx*cos - dy*sin); ys.push(dx*sin + dy*cos);
+    }
+  }
+  xs.sort((a, b) => a-b); ys.sort((a, b) => a-b);
+  const q = (arr, p) => arr[Math.min(arr.length-1, Math.max(0, Math.round(p*(arr.length-1))))];
+  const box = {x0:q(xs, .01)+1, x1:q(xs, .99)-1, y0:q(ys, .005), y1:q(ys, .995)};
+  if (box.x1-box.x0 < w*.12 || box.y1-box.y0 < h*.12) return null;
+  return {theta, box, k:cv.width/w};
+}
+function straighten(cv, f){
+  const {theta, box, k} = f;
+  const W = Math.round((box.x1-box.x0)*k), H = Math.round((box.y1-box.y0)*k);
+  const out = document.createElement('canvas'); out.width = W; out.height = H;
+  const x = out.getContext('2d');
+  x.fillStyle = '#fff'; x.fillRect(0, 0, W, H);
+  x.imageSmoothingQuality = 'high';
+  x.translate(-box.x0*k, -box.y0*k);
+  x.rotate(theta);
+  x.translate(-cv.width/2, -cv.height/2);
+  x.drawImage(cv, 0, 0);
+  return out;
+}
+
+/* Keskinlik: Laplace varyansı */
+function sharpness(cv){
+  const w = 360, h = Math.round(cv.height*w/cv.width);
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const x = c.getContext('2d', {willReadFrequently:true}); x.drawImage(cv, 0, 0, w, h);
+  const d = x.getImageData(0, 0, w, h).data, g = new Float32Array(w*h);
+  for (let i=0, j=0; i<g.length; i++, j+=4) g[i] = d[j]*.3 + d[j+1]*.59 + d[j+2]*.11;
+  let s=0, s2=0, n=0;
+  for (let y=1; y<h-1; y++) for (let px=1; px<w-1; px++) {
+    const i = y*w+px, l = 4*g[i]-g[i-1]-g[i+1]-g[i-w]-g[i+w];
+    s += l; s2 += l*l; n++;
+  }
+  const m = s/n; return s2/n - m*m;
+}
+function isBlurry(p){
+  const i = S.pages.indexOf(p);
+  const prev = S.pages.slice(Math.max(0, i-10), i+11).filter(q => q !== p).map(q => q.sharp || 0);
+  if (prev.length < 2) return false;
+  return p.sharp < Math.max(...prev)*0.5;
+}
+
+/* Gölgeyi temizler, kağıdı beyazlatır; soluk termal yazıyı korur */
+function enhance(ctx, w, h, mode){
+  if (mode === 'orig') return;
+  const img = ctx.getImageData(0, 0, w, h), d = img.data, n = w*h;
+  const g = new Uint8Array(n);
+  for (let i=0, j=0; i<n; i++, j+=4) g[i] = (d[j]*77 + d[j+1]*150 + d[j+2]*29) >> 8;
+  const W = w+1, I = new Uint32Array(W*(h+1));
+  for (let y=1; y<=h; y++) {
+    let row = 0; const o = y*W, po = o-W, go = (y-1)*w;
+    for (let x=1; x<=w; x++) { row += g[go+x-1]; I[o+x] = I[po+x] + row; }
+  }
+  const r = Math.max(10, Math.round(Math.min(w, h)/8));
+  const lut = new Uint8Array(1001);   // ton eğrisi: soluk gri korunur, kağıt bembeyaz
+  for (let i=0; i<=1000; i++) { const v = i/1000; lut[i] = v >= 1 ? 255 : Math.round(255*Math.pow(v, 2.4)); }
+  for (let y=0; y<h; y++) {
+    const y0 = Math.max(0, y-r), y1 = Math.min(h, y+r+1);
+    for (let x=0; x<w; x++) {
+      const x0 = Math.max(0, x-r), x1 = Math.min(w, x+r+1);
+      const s = I[y1*W+x1] - I[y0*W+x1] - I[y1*W+x0] + I[y0*W+x0];
+      const m = s/((x1-x0)*(y1-y0)) || 1;
+      const i = y*w+x, j = i*4, gv = g[i];
+      if (mode === 'bw') {
+        const v = gv < m*0.86 ? 0 : 255;
+        d[j] = d[j+1] = d[j+2] = v;
+      } else {
+        const ratio = Math.min(1, gv/(m*0.94));
+        const v = lut[(ratio*1000)|0];
+        if (mode === 'gray') { d[j] = d[j+1] = d[j+2] = v; }
+        else { const f = v/(gv || 1); d[j] *= f; d[j+1] *= f; d[j+2] *= f; }
+      }
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+/* ---------- Sayfalar ---------- */
+function addPage(p, animate){
+  S.pages.push(p);
+  const wrap = document.createElement('div');
+  wrap.className = 'slipwrap' + (animate ? ' new' : '');
+  const b = document.createElement('button');
+  b.className = 'slip';
+  b.setAttribute('aria-label', 'Sayfa ' + S.pages.length);
+  const img = document.createElement('img'); img.alt = ''; img.src = p.url;
+  b.appendChild(img);
+  b.onclick = () => openPreview(S.pages.indexOf(p));
+  wrap.appendChild(b);
+  p.el = wrap;
+  strip.appendChild(wrap);
+  strip.scrollLeft = strip.scrollWidth;
+  updateCount();
+  refreshWarnings();
+}
+function refreshWarnings(){ S.pages.forEach(p => p.el.classList.toggle('warn', isBlurry(p))); }
+function updateCount(){
+  $('count').textContent = S.pages.length;
+  $('pdfBtn').disabled = S.pages.length === 0;
+}
+function openPreview(i){
+  S.previewIdx = i;
+  const p = S.pages[i], blurry = isBlurry(p);
+  $('previewImg').src = p.url;
+  $('previewMeta').textContent = `Sayfa ${i+1} / ${S.pages.length}` + (blurry ? ', bulanık olabilir. Silip tekrar çekebilirsin.' : '');
+  $('previewMeta').classList.toggle('warn', blurry);
+  $('preview').showModal();
+}
+$('closePreview').onclick = () => $('preview').close();
+$('deletePage').onclick = () => {
+  const i = S.previewIdx; if (i < 0) return;
+  const p = S.pages[i];
+  URL.revokeObjectURL(p.url); p.el.remove(); DB.del(p.id);
+  S.pages.splice(i, 1);
+  S.lastSig = null; S.armed = true;  // aynı fişi yeniden çekebilsin
+  $('preview').close(); updateCount(); refreshWarnings(); toast('Sayfa silindi');
+};
+function clearAll(){
+  S.pages.forEach(p => URL.revokeObjectURL(p.url));
+  S.pages = []; strip.innerHTML = ''; S.lastSig = null; S.armed = true;
+  DB.clear(); updateCount();
+}
+
+/* ---------- Mod ve ayarlar ---------- */
+document.querySelectorAll('.modes button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.modes button').forEach(x => x.setAttribute('aria-checked', 'false'));
+  b.setAttribute('aria-checked', 'true'); S.mode = b.dataset.mode;
+});
+$('settingsBtn').onclick = () => $('settings').showModal();
+$('closeSettings').onclick = () => $('settings').close();
+$('trigger').onchange = e => {
+  S.trigger = e.target.value;
+  $('rowHold').classList.toggle('hidden', S.trigger !== 'smart');
+  $('rowInterval').classList.toggle('hidden', S.trigger !== 'timer');
+  S.nextAt = performance.now() + S.interval*1000;
+};
+$('hold').onchange = e => S.hold = +e.target.value;
+$('interval').onchange = e => { S.interval = +e.target.value; S.nextAt = performance.now() + S.interval*1000; };
+$('pageSize').onchange = e => S.pageSize = e.target.value;
+$('detect').onchange = e => S.detect = e.target.checked;
+$('crop').onchange = e => { S.crop = e.target.checked; guide.classList.toggle('off', !S.crop); };
+$('sound').onchange = e => S.sound = e.target.checked;
+$('clearAll').onclick = () => {
+  if (S.pages.length && confirm(`${S.pages.length} sayfanın hepsi silinsin mi?`)) { clearAll(); $('settings').close(); }
+};
+
+/* ---------- PDF ---------- */
+$('pdfBtn').onclick = makePdf;
+async function makePdf(){
+  if (!S.pages.length) return;
+  if (!window.jspdf) { toast('PDF kütüphanesi yüklenemedi, interneti kontrol et'); return; }
+  if (S.running) stopAuto();
+  $('pdfBtn').disabled = true;
+  const { jsPDF } = window.jspdf;
+  let doc = null;
+  const N = S.pages.length;
+  for (let i=0; i<N; i++) {
+    const p = S.pages[i];
+    const bytes = new Uint8Array(await p.blob.arrayBuffer());
+    let fw, fh, x, y, w, h, newPage = true;
+    if (S.pageSize === 'a4x3') {
+      fw = 210; fh = 297; const m = 8, gap = 4, slotW = (fw - 2*m - 2*gap)/3, slotH = fh - 2*m;
+      const k = Math.min(slotW/p.w, slotH/p.h);
+      w = p.w*k; h = p.h*k; x = m + (i % 3)*(slotW + gap) + (slotW - w)/2; y = m;
+      newPage = i % 3 === 0;
+    } else if (S.pageSize === 'a4') {
+      fw = 210; fh = 297; const m = 10;
+      const k = Math.min((fw-2*m)/p.w, (fh-2*m)/p.h);
+      w = p.w*k; h = p.h*k; x = (fw-w)/2; y = m;
+    } else {
+      fw = 80; fh = 80*p.h/p.w; x = 0; y = 0; w = fw; h = fh;
+    }
+    const orient = fh >= fw ? 'p' : 'l';
+    if (!doc) doc = new jsPDF({unit:'mm', format:[fw, fh], orientation:orient, compress:true});
+    else if (newPage) doc.addPage([fw, fh], orient);
+    doc.addImage(bytes, 'JPEG', x, y, w, h, 'p'+i, 'NONE');
+    if (i % 5 === 0) { toast(`PDF hazırlanıyor ${i+1}/${N}`, 60000); await new Promise(r => setTimeout(r)); }
+  }
+  S.pdf = doc.output('blob');
+  if (S.pdfUrl) URL.revokeObjectURL(S.pdfUrl);
+  S.pdfUrl = URL.createObjectURL(S.pdf);
+  const d = new Date(), z = n => String(n).padStart(2, '0');
+  S.pdfName = `fisler-${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}.pdf`;
+  $('dlLink').href = S.pdfUrl; $('dlLink').download = S.pdfName; $('dlLink').textContent = 'İndir';
+  const blurry = S.pages.filter(isBlurry).length;
+  $('doneMeta').textContent = `${N} fiş, ${(S.pdf.size/1048576).toFixed(1)} MB` + (blurry ? `. ${blurry} fiş bulanık olabilir, kırmızı işaretli olanlara bak.` : '');
+  toast('', 0);
+  $('pdfBtn').disabled = false;
+  $('done').showModal();
+}
+$('shareBtn').onclick = async () => {
+  const f = new File([S.pdf], S.pdfName, {type:'application/pdf'});
+  if (navigator.canShare && navigator.canShare({files:[f]})) {
+    try { await navigator.share({files:[f], title:S.pdfName}); } catch(e){}
+  } else $('dlLink').click();
+};
+$('closeDone').onclick = () => $('done').close();
+$('newSession').onclick = () => {
+  if (confirm('Sayfalar temizlensin mi? PDF\'i kaydettiğinden emin ol.')) {
+    clearAll(); $('shutterLabel').textContent = S.running ? '•' : 'Başlat'; $('done').close();
+  }
+};
+
+/* ---------- Geri bildirim ---------- */
+function flash(){ const f = $('flash'); f.classList.add('on'); requestAnimationFrame(() => requestAnimationFrame(() => f.classList.remove('on'))); }
+function beep(){
+  if (!S.sound || !S.ac) return;
+  const t = S.ac.currentTime, o = S.ac.createOscillator(), g = S.ac.createGain();
+  o.frequency.value = 1300; g.gain.setValueAtTime(.18, t);
+  g.gain.exponentialRampToValueAtTime(.001, t+.12);
+  o.connect(g).connect(S.ac.destination); o.start(t); o.stop(t+.13);
+}
+let toastT;
+function toast(msg, ms = 1400){
+  const t = $('toast'); clearTimeout(toastT);
+  if (!msg) { t.classList.remove('on'); return; }
+  t.textContent = msg; t.classList.add('on');
+  toastT = setTimeout(() => t.classList.remove('on'), ms);
+}
+</script>
+</body>
+</html>
